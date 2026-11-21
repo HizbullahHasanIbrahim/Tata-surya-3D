@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tata Surya 3D Interaktif</title>
+    <link rel="stylesheet" href="style.css">
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+    <canvas id="solarCanvas"></canvas>
+
+    <div id="ui-container">
+        <div id="controls">
+            <button id="playPauseBtn">⏸</button>
+            <input type="range" id="speedSlider" min="0" max="5" step="0.1" value="1">
+            <span id="speedDisplay">1.0x</span>
+        </div>
+    </div>
+
+    <div id="infoPanel" class="hidden">
+        <div class="info-content">
+            <button id="closeBtn">&times;</button>
+            <h2 id="planetName">Nama Planet</h2>
+            <p id="planetTagline" class="tagline">Julukan</p>
+            <p id="planetDesc">Deskripsi</p>
+            <div class="data-grid">
+                <div class="data-item"><strong>Diameter:</strong> <span id="dataDiameter">-</span></div>
+                <div class="data-item"><strong>Jarak:</strong> <span id="dataDistance">-</span></div>
+                <div class="data-item"><strong>Orbit:</strong> <span id="dataOrbit">-</span></div>
+            </div>
+            <p class="fact"><strong>Fakta:</strong> <span id="planetFact">-</span></p>
+        </div>
+    </div>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
