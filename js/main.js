@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { CSS2DRenderer, CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
 import { PLANET_DATA, MOON_DATA } from './data.js';
-import { createTexture, createRingTexture, createMoonTexture } from './textures.js';
+import { createTexture, createRingTexture, createMoonTexture, createCloudsTexture } from './textures.js';
 
 // Scene setup
 const canvas = document.querySelector('#solarCanvas');
@@ -33,6 +34,14 @@ controls.zoomSpeed = 1.0;
 controls.minDistance = 15;
 controls.maxDistance = 800;
 
+// CSS2DRenderer for labels
+const labelRenderer = new CSS2DRenderer();
+labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.style.position = 'absolute';
+labelRenderer.domElement.style.top = '0px';
+labelRenderer.domElement.style.pointerEvents = 'none';
+document.getElementById('app').appendChild(labelRenderer.domElement);
+
 // Lighting
 const ambientLight = new THREE.AmbientLight(0xffffff, 0.15);
 scene.add(ambientLight);
@@ -45,8 +54,8 @@ scene.add(sunLight);
 const sharedGeometry = new THREE.SphereGeometry(1, 64, 32);
 const sharedGeometryMobile = new THREE.SphereGeometry(1, 32, 16);
 
-// Planet data with accurate astronomical constants
-const planetConfigs = PLANET_DATA.map(data => ({
+// Planet data with accurate astronomical constants (filter out sun)
+const planetConfigs = PLANET_DATA.filter(d => d.id !== 'sun').map(data => ({
     ...data,
     size: data.size,
     orbitRadius: data.orbitRadius,
@@ -96,13 +105,12 @@ const starMaterial = new THREE.ShaderMaterial({
             gl_PointSize = size * (300.0 / -mvPosition.z);
             gl_Position = projectionMatrix * mvPosition;
             
-            // Twinkling effect
             vTwinkle = 0.7 + 0.3 * sin(uTime * 2.0 + phase * 10.0);
         }
     `,
     fragmentShader: `
         precision mediump float;
-        uniform vec4 uColor;
+        uniform vec3 uColor;
         varying float vTwinkle;
         
         void main() {
@@ -110,7 +118,7 @@ const starMaterial = new THREE.ShaderMaterial({
             if (distanceFromCenter > 0.5) discard;
             
             float alpha = smoothstep(0.5, 0.0, distanceFromCenter) * vTwinkle;
-            gl_FragColor = vec4(uColor.rgb, alpha);
+            gl_FragColor = vec4(uColor, alpha);
         }
     `,
     transparent: true,
@@ -182,6 +190,7 @@ sun.add(createGlowLayer(60, 0.4));
 // Planets and Moon
 const clickableObjects = [];
 const planets = [];
+const orbitLines = [];
 clickableObjects.push(sun);
 
 planetConfigs.forEach((config, index) => {
@@ -200,54 +209,54 @@ planetConfigs.forEach((config, index) => {
     const orbitLine = new THREE.LineLoop(orbitGeometry, orbitMaterial);
     orbitLine.rotation.x = Math.PI / 2;
     scene.add(orbitLine);
+    orbitLines.push(orbitLine);
     
     // Tilt group for axial tilt
     const tiltGroup = new THREE.Group();
     tiltGroup.rotation.z = THREE.MathUtils.degToRad(config.tilt || 0);
     pivot.add(tiltGroup);
     
-    // Create planet mesh
-    const geometry = window.innerWidth < 768 ? sharedGeometryMobile.clone() : sharedGeometry.clone();
+    // Create planet mesh (no clone, use shared geometry + scale)
+    const geometry = window.innerWidth < 768 ? sharedGeometryMobile : sharedGeometry;
     const material = new THREE.MeshStandardMaterial({
         map: createTexture(config.color, config.texture, index * 100 + 42),
         roughness: 0.8,
         metalness: 0.1
     });
     const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(config.orbitRadius, 0, 0);
+    mesh.scale.setScalar(config.size);
     tiltGroup.add(mesh);
     
     // Add atmosphere for Earth and Venus
     if (config.hasAtmosphere && config.atmosphereColor) {
-        const atmosGeometry = new THREE.SphereGeometry(config.size * 1.02, 32, 16);
         const atmosMaterial = new THREE.MeshBasicMaterial({
             color: config.atmosphereColor,
             transparent: true,
             opacity: 0.3,
             side: THREE.BackSide
         });
-        const atmosMesh = new THREE.Mesh(atmosGeometry, atmosMaterial);
-        mesh.add(atmosMesh);
+        const atmosMesh = new THREE.Mesh(sharedGeometry, atmosMaterial);
+        atmosMesh.scale.setScalar(config.size * 1.02);
+        tiltGroup.add(atmosMesh);
     }
     
     // Cloud layer for Earth
     if (config.hasClouds) {
-        const cloudGeometry = new THREE.SphereGeometry(config.size * 1.01, 32, 16);
         const cloudMaterial = new THREE.MeshStandardMaterial({
-            map: createTexture('#FFFFFF', 'cloudy', index * 100 + 100),
+            map: createCloudsTexture(),
             transparent: true,
             opacity: 0.5,
             depthWrite: false
         });
-        const cloudMesh = new THREE.Mesh(cloudGeometry, cloudMaterial);
-        cloudMesh.position.set(config.orbitRadius, 0, 0);
-        pivot.add(cloudMesh);
+        const cloudMesh = new THREE.Mesh(sharedGeometry, cloudMaterial);
+        cloudMesh.scale.setScalar(config.size * 1.01);
+        tiltGroup.add(cloudMesh);
         
         // Store reference for animation
         config.cloudMesh = cloudMesh;
     }
     
-    // Saturn rings (multiple layers)
+    // Saturn rings (multiple layers with UV mapping)
     if (config.hasRings) {
         const ringData = [
             { inner: config.size * 1.4, outer: config.size * 1.8, opacity: 0.4 },
@@ -257,6 +266,17 @@ planetConfigs.forEach((config, index) => {
         
         ringData.forEach(ringConfig => {
             const ringGeometry = new THREE.RingGeometry(ringConfig.inner, ringConfig.outer, 64);
+            // Radial UV mapping
+            const posAttr = ringGeometry.attributes.position;
+            const uvAttr = ringGeometry.attributes.uv;
+            for (let i = 0; i < posAttr.count; i++) {
+                const x = posAttr.getX(i);
+                const y = posAttr.getY(i);
+                const dist = Math.sqrt(x * x + y * y);
+                const u = (dist - ringConfig.inner) / (ringConfig.outer - ringConfig.inner);
+                uvAttr.setXY(i, u, 0.5);
+            }
+            
             const ringMaterial = new THREE.MeshStandardMaterial({
                 map: createRingTexture(),
                 side: THREE.DoubleSide,
@@ -265,7 +285,7 @@ planetConfigs.forEach((config, index) => {
             });
             const ring = new THREE.Mesh(ringGeometry, ringMaterial);
             ring.rotation.x = Math.PI / 2;
-            mesh.add(ring);
+            tiltGroup.add(ring);
         });
     }
     
@@ -280,7 +300,7 @@ planetConfigs.forEach((config, index) => {
         });
         const ring = new THREE.Mesh(ringGeometry, ringMaterial);
         ring.rotation.x = Math.PI / 2;
-        mesh.add(ring);
+        tiltGroup.add(ring);
     }
     
     // Hitbox for small planets
@@ -292,13 +312,22 @@ planetConfigs.forEach((config, index) => {
             depthWrite: false
         });
         const hitbox = new THREE.Mesh(hitboxGeometry, hitboxMaterial);
-        mesh.add(hitbox);
+        tiltGroup.add(hitbox);
         clickableObjects.push(hitbox);
     }
     
     // Make the main mesh clickable
     mesh.userData = { ...config, pivot, isPlanet: true };
     clickableObjects.push(mesh);
+    
+    // CSS2D label
+    const labelDiv = document.createElement('div');
+    labelDiv.className = 'planet-label';
+    labelDiv.textContent = config.name;
+    const label = new CSS2DObject(labelDiv);
+    label.position.set(0, config.size + 1.5, 0);
+    mesh.add(label);
+    config.label = label;
     
     pivot.userData = { ...config, mesh };
     planets.push({ pivot, mesh, config, angle: Math.random() * Math.PI * 2 });
@@ -308,7 +337,7 @@ planetConfigs.forEach((config, index) => {
 const earthPlanet = planets.find(p => p.config.id === 'earth');
 if (earthPlanet) {
     const moonPivot = new THREE.Group();
-    earthPlanet.mesh.add(moonPivot);
+    earthPlanet.pivot.add(moonPivot);
     
     const moonGeometry = new THREE.SphereGeometry(MOON_DATA.size, 32, 16);
     const moonMaterial = new THREE.MeshStandardMaterial({
@@ -317,7 +346,8 @@ if (earthPlanet) {
         metalness: 0
     });
     const moon = new THREE.Mesh(moonGeometry, moonMaterial);
-    moon.position.set(MOON_DATA.orbitRadius, 0, 0);
+    moon.scale.setScalar(1);
+    moonPivot.add(moon);
     moon.userData = {
         type: 'moon',
         name: 'Bulan',
@@ -345,20 +375,14 @@ if (earthPlanet) {
     const moonOrbit = new THREE.Line(moonOrbitGeometry, moonOrbitMaterial);
     moonOrbit.rotation.x = Math.PI / 2 + THREE.MathUtils.degToRad(MOON_DATA.tilt);
     earthPlanet.mesh.add(moonOrbit);
+    orbitLines.push(moonOrbit);
     
-    const moonConfig = {
-        pivot: moonPivot,
-        mesh: moon,
-        config: MOON_DATA,
-        angle: 0
-    };
+    earthPlanet.moonPivot = moonPivot;
+    earthPlanet.moon = moon;
+    earthPlanet.moonAngle = 0;
 }
 
-// Interaction state
-let focusedTarget = null;
-let prevTargetPos = new THREE.Vector3();
-let isTransitioning = false;
-// Interaction state
+// Interaction state (single declaration)
 let pointerDownPos = { x: 0, y: 0 };
 let focusedTarget = null;
 let focusedData = null;
@@ -368,7 +392,7 @@ let timeScale = 1;
 let isPaused = false;
 let activePointers = new Set();
 let hadMultiTouch = false;
-let showLabels = false;
+let showLabels = true;
 let showOrbits = true;
 
 // UI elements
@@ -421,6 +445,10 @@ canvas.addEventListener('pointermove', (e) => {
     }
 });
 
+controls.addEventListener('start', () => {
+    isTransitioning = false;
+});
+
 function handlePlanetClick(event) {
     mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
     mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
@@ -436,6 +464,9 @@ function handlePlanetClick(event) {
             focusOnSun(data);
         } else if (data.pivot) {
             focusOnPlanet(data.pivot, data);
+        } else if (data.type === 'moon') {
+            // Moon click - focus on earth pivot
+            focusOnPlanet(earthPlanet.pivot, data);
         }
     } else {
         closeInfoPanel();
@@ -448,6 +479,7 @@ function focusOnSun(data) {
     isTransitioning = true;
     sun.getWorldPosition(prevTargetPos);
     
+    controls.minDistance = Math.max(data.size * 2.2, 4.5);
     updateInfoPanel(data);
 }
 
@@ -457,6 +489,7 @@ function focusOnPlanet(target, data) {
     isTransitioning = true;
     target.getWorldPosition(prevTargetPos);
     
+    controls.minDistance = Math.max(data.size * 2.2, 4.5);
     updateInfoPanel(data);
 }
 
@@ -475,6 +508,7 @@ function updateInfoPanel(data) {
 function closeInfoPanel() {
     infoPanel.classList.add('hidden');
     focusedTarget = null;
+    focusedData = null;
 }
 
 // Button handlers
@@ -482,6 +516,7 @@ document.getElementById('closeBtn').addEventListener('click', closeInfoPanel);
 resetCamBtn.addEventListener('click', () => {
     closeInfoPanel();
     focusedTarget = null;
+    focusedData = null;
     isTransitioning = true;
     controls.minDistance = 15;
 });
@@ -511,19 +546,24 @@ speedSlider.addEventListener('input', (e) => {
 
 toggleLabelBtn.addEventListener('click', () => {
     showLabels = !showLabels;
+    document.querySelectorAll('.planet-label').forEach(label => {
+        label.style.display = showLabels ? 'block' : 'none';
+    });
     toggleLabelBtn.style.opacity = showLabels ? '1' : '0.5';
-    // Toggle label visibility in scene would require CSS2DRenderer
 });
 
 toggleOrbitBtn.addEventListener('click', () => {
     showOrbits = !showOrbits;
+    orbitLines.forEach(line => {
+        line.visible = showOrbits;
+    });
     toggleOrbitBtn.style.opacity = showOrbits ? '1' : '0.5';
-    // Toggle orbit visibility
 });
 
 resetViewBtn.addEventListener('click', () => {
     closeInfoPanel();
     focusedTarget = null;
+    focusedData = null;
     isTransitioning = true;
     controls.minDistance = 15;
 });
@@ -545,8 +585,8 @@ window.addEventListener('resize', () => {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
+    labelRenderer.setSize(window.innerWidth, window.innerHeight);
     
-    // Adjust pixel ratio for mobile
     const newPixelRatio = Math.min(window.devicePixelRatio, window.innerWidth < 768 ? 1.5 : 2);
     renderer.setPixelRatio(newPixelRatio);
 });
@@ -560,15 +600,16 @@ const _idealPos = new THREE.Vector3();
 function animate() {
     requestAnimationFrame(animate);
     
-    const delta = Math.min(clock.getDelta(), 0.1) * timeScale;
+    const rawDelta = Math.min(clock.getDelta(), 0.1);
+    const simDelta = rawDelta * timeScale;
     
     // Update star twinkling
-    starMaterial.uniforms.uTime.value += delta;
+    starMaterial.uniforms.uTime.value += rawDelta;
     
     // Animate planets
     planets.forEach(item => {
         if (!isPaused) {
-            item.angle += item.config.speed * delta;
+            item.angle += item.config.speed * simDelta;
             item.pivot.position.set(
                 Math.cos(item.angle) * item.config.orbitRadius,
                 0,
@@ -576,18 +617,24 @@ function animate() {
             );
             
             // Rotate planet
-            item.mesh.rotation.y += delta * item.config.rotationSpeed;
+            item.mesh.rotation.y += simDelta * item.config.rotationSpeed;
             
             // Rotate clouds faster if exists
             if (item.config.cloudMesh) {
-                item.config.cloudMesh.rotation.y += delta * item.config.rotationSpeed * 1.5;
+                item.config.cloudMesh.rotation.y += simDelta * item.config.rotationSpeed * 1.5;
             }
         }
     });
     
+    // Animate Moon orbit
+    if (earthPlanet && earthPlanet.moonPivot && !isPaused) {
+        earthPlanet.moonAngle += MOON_DATA.speed * simDelta;
+        earthPlanet.moonPivot.rotation.y = earthPlanet.moonAngle;
+    }
+    
     // Sun rotation
     if (!isPaused) {
-        sun.rotation.y += delta * 0.05;
+        sun.rotation.y += simDelta * 0.05;
     }
     
     // Camera follow logic
@@ -599,12 +646,12 @@ function animate() {
         controls.target.add(_v2);
         
         if (isTransitioning) {
-            const size = focusedData.size || 14;
+            const size = focusedData ? (focusedData.size || 14) : 14;
             const idealDist = Math.max(size * 5, 20);
             _idealPos.copy(_v1).add(new THREE.Vector3(0, size * 2, idealDist));
             
-            // Frame-rate independent lerp
-            const alpha = 1 - Math.exp(-delta * 6.0);
+            // Frame-rate independent lerp using rawDelta
+            const alpha = 1 - Math.exp(-rawDelta * 6.0);
             camera.position.lerp(_idealPos, alpha);
             controls.target.lerp(_v1, alpha);
             
@@ -616,7 +663,7 @@ function animate() {
         prevTargetPos.copy(_v1);
     } else if (isTransitioning) {
         const defaultPos = getDefaultCameraPosition();
-        const alpha = 1 - Math.exp(-delta * 6.0);
+        const alpha = 1 - Math.exp(-rawDelta * 6.0);
         camera.position.lerp(defaultPos, alpha);
         controls.target.lerp(new THREE.Vector3(0, 0, 0), alpha);
         
@@ -627,6 +674,7 @@ function animate() {
     
     controls.update();
     renderer.render(scene, camera);
+    labelRenderer.render(scene, camera);
 }
 
 function getDefaultCameraPosition() {
@@ -648,6 +696,7 @@ document.addEventListener('visibilitychange', () => {
 // Cleanup on page unload
 window.addEventListener('beforeunload', () => {
     renderer.dispose();
+    labelRenderer.domElement.remove();
     if (window.__SOLAR_SYSTEM__) {
         window.__SOLAR_SYSTEM__ = null;
     }
@@ -656,7 +705,7 @@ window.addEventListener('beforeunload', () => {
 animate();
 
 // Initialize UI
-toggleLabelBtn.style.opacity = '0.5';
+toggleLabelBtn.style.opacity = '1';
 toggleOrbitBtn.style.opacity = '1';
 document.getElementById('hud').classList.remove('hidden');
 

@@ -1,11 +1,5 @@
 import * as THREE from 'three';
 
-// Seeded PRNG for deterministic procedural textures
-function seededRandom(seed) {
-    let x = Math.sin(seed++) * 10000;
-    return x - Math.floor(x);
-}
-
 export function createTexture(color, type, seed = 42) {
     const size = 1024;
     const canvas = document.createElement('canvas');
@@ -23,7 +17,6 @@ export function createTexture(color, type, seed = 42) {
     };
 
     if (type === 'sun') {
-        // Solar granulation & flare spots
         const grad = ctx.createRadialGradient(size/2, size/2, size/10, size/2, size/2, size/2);
         grad.addColorStop(0, '#FFF5CC');
         grad.addColorStop(0.5, '#FFCC00');
@@ -38,7 +31,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.fill();
         }
     } else if (type === 'rocky') {
-        // Craters and roughness
         for (let i = 0; i < 1500; i++) {
             const x = rand() * size;
             const y = rand() * size;
@@ -56,7 +48,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.stroke();
         }
     } else if (type === 'cloudy') {
-        // Venus thick swirls
         for (let i = 0; i < 120; i++) {
             ctx.fillStyle = `rgba(255, 240, 180, ${rand() * 0.18})`;
             ctx.beginPath();
@@ -65,8 +56,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.fill();
         }
     } else if (type === 'earth') {
-        // Ocean base is already painted in 'color'
-        // Organic Continents (6 major landmass clusters)
         ctx.fillStyle = '#285C28';
         for (let c = 0; c < 7; c++) {
             let cx = rand() * size;
@@ -77,12 +66,10 @@ export function createTexture(color, type, seed = 42) {
                 ctx.fill();
             }
         }
-        // Polar ice caps
         ctx.fillStyle = '#F8F8FF';
         ctx.fillRect(0, 0, size, 70);
         ctx.fillRect(0, size - 70, size, 70);
 
-        // Thin semi-transparent clouds
         ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
         for (let i = 0; i < 50; i++) {
             ctx.beginPath();
@@ -90,7 +77,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.fill();
         }
     } else if (type === 'banded') {
-        // Jupiter / Saturn atmospheric bands
         const bandCount = 35;
         for (let i = 0; i < bandCount; i++) {
             const y = (i / bandCount) * size;
@@ -99,7 +85,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.fillStyle = rand() > 0.5 ? `rgba(255, 255, 255, ${alpha})` : `rgba(0, 0, 0, ${alpha})`;
             ctx.fillRect(0, y, size, h);
         }
-        // Jupiter Great Red Spot (only once if color matches Jupiter)
         if (color === '#D39C7E') {
             ctx.fillStyle = 'rgba(180, 50, 20, 0.65)';
             ctx.beginPath();
@@ -110,7 +95,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.stroke();
         }
     } else if (type === 'saturn') {
-        // Saturn bands
         for (let i = 0; i < 30; i++) {
             const y = (i / 30) * size;
             const alpha = rand() * 0.25 + 0.05;
@@ -118,7 +102,6 @@ export function createTexture(color, type, seed = 42) {
             ctx.fillRect(0, y, size, size / 30);
         }
     } else if (type === 'smooth') {
-        // Uranus & Neptune subtle horizontal atmosphere
         for (let i = 0; i < 20; i++) {
             ctx.fillStyle = `rgba(255, 255, 255, ${rand() * 0.08})`;
             ctx.fillRect(0, rand() * size, size, rand() * 15 + 5);
@@ -132,7 +115,6 @@ export function createTexture(color, type, seed = 42) {
     return texture;
 }
 
-// Multi-layer concentric ring texture with Cassini Division
 export function createRingTexture() {
     const canvas = document.createElement('canvas');
     canvas.width = 512;
@@ -144,7 +126,7 @@ export function createRingTexture() {
     grad.addColorStop(0.15, 'rgba(180, 160, 130, 0.3)');
     grad.addColorStop(0.35, 'rgba(210, 190, 150, 0.75)');
     grad.addColorStop(0.50, 'rgba(140, 120, 90, 0.85)');
-    grad.addColorStop(0.53, 'rgba(10, 10, 10, 0.08)'); // Cassini Division - ultra clean transparency
+    grad.addColorStop(0.53, 'rgba(10, 10, 10, 0.08)');
     grad.addColorStop(0.56, 'rgba(220, 200, 160, 0.9)');
     grad.addColorStop(0.85, 'rgba(190, 170, 130, 0.6)');
     grad.addColorStop(1.00, 'rgba(0,0,0,0)');
@@ -157,7 +139,34 @@ export function createRingTexture() {
     return texture;
 }
 
-// Moon procedural texture
 export function createMoonTexture() {
     return createTexture('#C0C0C0', 'rocky', 1337);
+}
+
+export function createCloudsTexture() {
+    const size = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    ctx.clearRect(0, 0, size, size);
+    
+    for (let i = 0; i < 60; i++) {
+        const x = Math.random() * size;
+        const y = Math.random() * size;
+        const r = Math.random() * 40 + 20;
+        
+        const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+        grad.addColorStop(0, 'rgba(255, 255, 255, 0.6)');
+        grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    return texture;
 }

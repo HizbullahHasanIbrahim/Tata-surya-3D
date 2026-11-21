@@ -288,6 +288,8 @@ h2 {
     pointer-events: none;
     width: 100%;
     padding: 0 20px;
+    display: flex;
+    justify-content: center;
 }
 
 #controls {
@@ -342,6 +344,17 @@ h2 {
     font-variant-numeric: tabular-nums;
     font-size: 0.9rem;
     text-align: center;
+}
+
+/* CSS2D Labels */
+.planet-label {
+    color: #fff;
+    font-size: 12px;
+    font-weight: 600;
+    text-shadow: 0 0 4px rgba(0,0,0,0.8), 0 0 8px rgba(0,0,0,0.5);
+    pointer-events: none;
+    white-space: nowrap;
+    user-select: none;
 }
 
 /* No WebGL fallback */
