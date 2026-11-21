@@ -45,6 +45,7 @@ export const CELESTIAL_CONFIG = {
             orbitalPeriodDays: 87.97,
             rotationPeriodDays: 58.65,
             axialTiltDeg: 0.03,
+            initialAngle: 0.45,
             diameterText: '4.879 km (0,38x Bumi)',
             distanceText: '57,9 juta km (0,39 SA)',
             revolutionText: '88 Hari Bumi',
@@ -64,8 +65,9 @@ export const CELESTIAL_CONFIG = {
             diameterKm: 12104,
             au: 0.723,
             orbitalPeriodDays: 224.7,
-            rotationPeriodDays: -243.02, // Rotasi retrograde
+            rotationPeriodDays: -243.02,
             axialTiltDeg: 177.4,
+            initialAngle: 2.05,
             diameterText: '12.104 km (0,95x Bumi)',
             distanceText: '108,2 juta km (0,72 SA)',
             revolutionText: '224,7 Hari Bumi',
@@ -87,6 +89,7 @@ export const CELESTIAL_CONFIG = {
             orbitalPeriodDays: 365.25,
             rotationPeriodDays: 1.0,
             axialTiltDeg: 23.44,
+            initialAngle: 3.65,
             diameterText: '12.742 km (Standar 1,00x)',
             distanceText: '149,6 juta km (1,00 SA)',
             revolutionText: '365,25 Hari Bumi',
@@ -106,7 +109,7 @@ export const CELESTIAL_CONFIG = {
                 diameterText: '3.474 km (0,27x Bumi)',
                 distanceText: '384.400 km dari Bumi',
                 revolutionText: '27,32 Hari Bumi',
-                rotationText: '27,32 Hari (Terkunci Gravitasi)',
+                rotationText: '27,32 Hari (Tidal Lock)',
                 tiltText: '5,14° terhadap ekliptika',
                 description: 'Satelit alami Bumi yang terkunci secara pasang surut (tidal locked), selalu menghadapkan sisi yang sama ke Bumi dan menstabilkan kemiringan sumbu rotasi Bumi.',
                 characteristics: 'Terkunci pasang surut, memicu pasang surut air laut Bumi, permukaan kaya kawah mare.',
@@ -126,6 +129,7 @@ export const CELESTIAL_CONFIG = {
             orbitalPeriodDays: 686.98,
             rotationPeriodDays: 1.026,
             axialTiltDeg: 25.19,
+            initialAngle: 5.15,
             diameterText: '6.779 km (0,53x Bumi)',
             distanceText: '227,9 juta km (1,52 SA)',
             revolutionText: '687 Hari Bumi (1,88 Tahun)',
@@ -147,6 +151,7 @@ export const CELESTIAL_CONFIG = {
             orbitalPeriodDays: 4332.59,
             rotationPeriodDays: 0.414,
             axialTiltDeg: 3.13,
+            initialAngle: 1.15,
             diameterText: '139.820 km (11,0x Bumi)',
             distanceText: '778,5 juta km (5,20 SA)',
             revolutionText: '11,86 Tahun Bumi',
@@ -168,6 +173,7 @@ export const CELESTIAL_CONFIG = {
             orbitalPeriodDays: 10759.22,
             rotationPeriodDays: 0.444,
             axialTiltDeg: 26.73,
+            initialAngle: 4.3,
             diameterText: '116.460 km (9,14x Bumi)',
             distanceText: '1,43 miliar km (9,58 SA)',
             revolutionText: '29,45 Tahun Bumi',
@@ -187,8 +193,9 @@ export const CELESTIAL_CONFIG = {
             diameterKm: 50724,
             au: 19.201,
             orbitalPeriodDays: 30685.4,
-            rotationPeriodDays: -0.718, // Rotasi menyamping retrograde
+            rotationPeriodDays: -0.718,
             axialTiltDeg: 97.77,
+            initialAngle: 2.75,
             diameterText: '50.724 km (3,98x Bumi)',
             distanceText: '2,87 miliar km (19,2 SA)',
             revolutionText: '84,02 Tahun Bumi',
@@ -210,6 +217,7 @@ export const CELESTIAL_CONFIG = {
             orbitalPeriodDays: 60189.0,
             rotationPeriodDays: 0.671,
             axialTiltDeg: 28.32,
+            initialAngle: 5.75,
             diameterText: '49.244 km (3,86x Bumi)',
             distanceText: '4,50 miliar km (30,1 SA)',
             revolutionText: '164,8 Tahun Bumi',
@@ -228,13 +236,10 @@ export const CELESTIAL_CONFIG = {
 CELESTIAL_CONFIG.planets.forEach(p => {
     p.visualRadius = computeVisualRadius(p.diameterKm);
     p.orbitRadius = computeOrbitRadius(p.au);
-    // Kecepatan sudut revolusi: radian per hari simulasi
     p.orbitalRadPerDay = (Math.PI * 2) / p.orbitalPeriodDays;
-    // Kecepatan sudut rotasi: radian per hari simulasi
+    
+    // Perbaikan: Hapus double-negative retrograde. rotationRadPerDay selalu positif karena tiltGroup menangani arah.
     p.rotationRadPerDay = ROTATION_RAD_PER_SIM_DAY / Math.abs(p.rotationPeriodDays);
-    if (p.rotationPeriodDays < 0) {
-        p.rotationRadPerDay = -p.rotationRadPerDay;
-    }
 
     if (p.moon) {
         p.moon.orbitalRadPerDay = (Math.PI * 2) / p.moon.orbitalPeriodDays;

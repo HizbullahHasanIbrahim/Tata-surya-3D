@@ -171,21 +171,15 @@ const starMaterial = new THREE.ShaderMaterial({
 const starField = new THREE.Points(starGeometry, starMaterial);
 scene.add(starField);
 
+// Daftar global untuk label dan hitbox (dibutuhkan sebelum sun dibuat)
+const hitMeshes = [];
+const labelObjects = [];
+const clickableObjects = [];
+const orbitLines = [];
+const planets = [];
+
 // ============== Sun Setup ==============
 const sunConfig = CELESTIAL_CONFIG.sun;
-
-// Label 3D untuk Matahari
-const sunLabelDiv = document.createElement('div');
-sunLabelDiv.className = 'planet-label';
-sunLabelDiv.textContent = sunConfig.name;
-sunLabelDiv.addEventListener('click', (e) => {
-    e.stopPropagation();
-    focusOnObject(sun, sun.userData);
-});
-const sunLabel = new CSS2DObject(sunLabelDiv);
-sunLabel.position.set(0, sunConfig.visualRadius + 1.35, 0);
-sun.add(sunLabel);
-labelObjects.push(sunLabel);
 const geomSun = new THREE.SphereGeometry(sunConfig.visualRadius, 64, 64);
 
 const sunTexture = buildSunTexture(isMobile);
@@ -204,6 +198,19 @@ sun.userData = {
     ...sunConfig
 };
 scene.add(sun);
+
+// Label 3D untuk Matahari (ditempelkan setelah sun dibuat)
+const sunLabelDiv = document.createElement('div');
+sunLabelDiv.className = 'planet-label';
+sunLabelDiv.textContent = sunConfig.name;
+sunLabelDiv.addEventListener('click', (e) => {
+    e.stopPropagation();
+    focusOnObject(sun, sun.userData);
+});
+const sunLabel = new CSS2DObject(sunLabelDiv);
+sunLabel.position.set(0, sunConfig.visualRadius + 1.35, 0);
+sun.add(sunLabel);
+labelObjects.push(sunLabel);
 
 // 2 lapisan corona pulsing sprite
 const createGlowLayer = (scale, opacity, c0, c1, c2) => {
@@ -224,9 +231,6 @@ sun.add(createGlowLayer(45, 0.8, 'rgba(255, 220, 100, 0.8)', 'rgba(255, 150, 0, 
 sun.add(createGlowLayer(60, 0.4, 'rgba(255, 240, 180, 0.4)', 'rgba(255, 180, 50, 0.2)', 'rgba(130, 0, 0, 0)'));
 
 // ============== Planet & Object Management ==============
-const clickableObjects = [];
-const orbitLines = [];
-const planets = [];
 let selectionHighlight = null;
 const highlightGeom = new THREE.RingGeometry(1.2, 1.35, 32);
 const highlightMat = new THREE.MeshBasicMaterial({
@@ -358,7 +362,7 @@ planetConfigs.forEach((config, index) => {
         tiltGroup,
         mesh,
         cloudMesh,
-        angle: Math.random() * Math.PI * 2
+        angle: config.initialAngle ?? (Math.random() * Math.PI * 2)
     });
 });
 
@@ -425,7 +429,7 @@ if (saturn) {
 
         const ringTex = buildRingStripTexture(layer.stops, 7701 + layer.name.charCodeAt(0), isMobile);
 
-        const ringMat = new THREE.MeshStandardMaterial({
+        const ringMat = new THREE.MeshBasicMaterial({
             map: ringTex,
             side: THREE.DoubleSide,
             transparent: true,
@@ -450,7 +454,7 @@ if (uranus) {
 
     uranusRings.forEach((r, idx) => {
         const ringGeom = new THREE.RingGeometry(r.inner, r.outer, 32);
-        const ringMat = new THREE.MeshStandardMaterial({
+        const ringMat = new THREE.MeshBasicMaterial({
             color: 0x88aaff,
             side: THREE.DoubleSide,
             transparent: true,
@@ -489,19 +493,10 @@ if (earth) {
     
     moon.userData = {
         type: 'moon',
-        id: 'moon',
-        name: 'Bulan',
-        tagline: 'Satelit Alami Bumi',
-        desc: 'Satelit alami terbesar kelima di Tata Surya, mengorbit Bumi pada jarak rata-rata 384.400 km.',
-        diameter: '3.474 km',
-        distance: '384.400 km dari Bumi',
-        orbitPeriod: '27,32 Hari',
-        rotationPeriod: '27,32 Hari (Tidal Lock)',
-        fact: 'Bulan selalu menunjukkan sisi yang sama ke Bumi karena tidal locking.',
-        size: m.radius,
+        ...earth.config.moon,
+        visualRadius: m.radius,
         orbitRadius: m.orbitRadius,
-        orbitalPeriodDays: m.orbitalPeriodDays,
-        moonData: { angle: 0 }
+        orbitalPeriodDays: m.orbitalPeriodDays
     };
     moonPivot.add(moon);
     clickableObjects.push(moon);
@@ -610,23 +605,28 @@ canvas.addEventListener('pointermove', e => {
             // Sorot garis orbit saat hover
             const hoveredObj = intersects[0].object;
             const hoveredData = hoveredObj.userData;
-            if (hoveredData.bodyData && hoveredData.bodyData.id) {
-                orbitLines.forEach(line => {
-                    if (line.userData && line.userData.planet === hoveredData.bodyData.id && focusedTarget !== hoveredData.bodyData) {
-                        line.material.color.setHex(0x7dd3fc);
-                        line.material.opacity = 0.4;
-                    }
-                });
-            }
-        } else {
-            canvas.style.cursor = 'default';
-            // Reset orbit warna jika tidak hover pada apapun dan tidak ada fokus
-            if (!focusedTarget) {
-                orbitLines.forEach(line => {
+            const hoveredPlanetId = hoveredData.bodyData?.id || (hoveredData.type === 'sun' ? 'sun' : null);
+            orbitLines.forEach(line => {
+                const isFocused = focusedTarget && (focusedTarget.userData?.id === line.userData?.planet);
+                if (isFocused) {
+                    line.material.color.setHex(0x38bdf8);
+                    line.material.opacity = 0.6;
+                } else if (hoveredPlanetId && line.userData?.planet === hoveredPlanetId) {
+                    line.material.color.setHex(0x7dd3fc);
+                    line.material.opacity = 0.4;
+                } else {
                     line.material.color.setHex(0xffffff);
                     line.material.opacity = 0.15;
-                });
-            }
+                }
+            });
+        } else {
+            canvas.style.cursor = 'default';
+            // Reset orbit warna jika tidak hover pada apapun
+            orbitLines.forEach(line => {
+                const isFocused = focusedTarget && (focusedTarget.userData?.id === line.userData?.planet);
+                line.material.color.setHex(isFocused ? 0x38bdf8 : 0xffffff);
+                line.material.opacity = isFocused ? 0.6 : 0.15;
+            });
         }
     }
 });
@@ -645,10 +645,10 @@ function handlePlanetClick(event) {
         
         if (data.type === 'sun') {
             focusOnObject(sun, sun.userData);
+        } else if (data.id === 'moon') {
+            focusOnObject(moon, moon.userData);
         } else if (data.bodyData) {
             focusOnPlanet(data.bodyData);
-        } else if (data.id === 'moon') {
-            focusOnPlanet(earth.config);
         }
     } else {
         closeInfoPanel();
@@ -789,6 +789,26 @@ resetTimeBtn.addEventListener('click', () => {
     clock.start();
     simDays = 0;
     updateSimClock(0, 0);
+
+    // Reset posisi sudut orbit ke awal
+    planets.forEach(item => {
+        item.angle = item.config.initialAngle ?? 0;
+        const ax = Math.cos(item.angle) * item.config.orbitRadius;
+        const az = Math.sin(item.angle) * item.config.orbitRadius;
+        item.orbitGroup.position.set(ax, 0, az);
+        item.mesh.rotation.y = 0;
+        if (item.cloudMesh) item.cloudMesh.rotation.y = 0;
+    });
+
+    if (moon && moonPivot) {
+        moonAngle = 0;
+        const mConfig = earth.config.moon;
+        const mx = Math.cos(moonAngle) * mConfig.orbitRadius;
+        const mz = Math.sin(moonAngle) * mConfig.orbitRadius;
+        moon.position.set(mx, 0, mz);
+    }
+
+    sun.rotation.y = 0;
     isPaused = false;
     timeScale = parseFloat(speedSlider.value) || 1;
     playPauseBtn.style.opacity = 1;
@@ -887,19 +907,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
     
-    // Planet chip click handlers
-    document.querySelectorAll('.planet-chip').forEach(chip => {
-        chip.addEventListener('click', () => {
-            const id = chip.getAttribute('data-planet');
-            if (id === 'sun') {
-                focusOnObject(sun, sun.userData);
-            } else {
-                const planet = planets.find(p => p.config.id === id);
-                if (planet) focusOnObject(planet.mesh, planet.config);
-            }
-            showPlanetChip(id);
-        });
-    });
+    
 });
 
 function showPlanetChip(id) {
@@ -912,6 +920,9 @@ function updateSpeedDisplay(val) {
     speedDisplay.textContent = val === 0 ? '0.0x' : val.toFixed(1) + 'x';
     speedDisplayMobile.textContent = val === 0 ? '0.0x' : val.toFixed(1) + 'x';
     speedSlider.value = val;
+    // Update CSS variable for slider gradient
+    const pct = (val / 10) * 100;
+    speedSlider.style.setProperty('--slider-pct', `${pct}%`);
 }
 
 function updateSimClock(day, year) {
@@ -979,38 +990,39 @@ function animate() {
     
     // Sun rotation (slow)
     if (!isPaused && timeScale > 0) {
-        sun.rotation.y += 0.05 * deltaSimDays;
+        sun.rotation.y += sunConfig.rotationRadPerDay * deltaSimDays;
     }
     
     // Camera follow & transition logic
     if (focusedTarget) {
         focusedTarget.getWorldPosition(_v1);
-        
+
         // PERBAIKAN: Hitung delta posisi target dan tambahkan ke kamera
         _delta.subVectors(_v1, prevTargetPos);
         camera.position.add(_delta);
         controls.target.add(_delta);
         prevTargetPos.copy(_v1);
-        
+
         // Update highlight mengikuti objek
         if (selectionHighlight && selectionHighlight.visible) {
             selectionHighlight.position.copy(_v1);
             selectionHighlight.quaternion.copy(camera.quaternion);
         }
-        
+
         if (isTransitioning) {
             const size = focusedTarget.userData?.visualRadius || focusedTarget.userData?.size || 5;
             const idealDist = Math.max(size * 5, 20);
-            
+
             // Posisi ideal dari arah kamera saat ini (bukan selalu +Z)
-            const camDir = new THREE.Vector3().subVectors(camera.position, controls.target).normalize();
-            _idealPos.copy(controls.target).addScaledVector(camDir, idealDist).add(new THREE.Vector3(0, size * 1.5, 0));
-            
+            _v2.subVectors(camera.position, controls.target).normalize();
+            _idealPos.copy(controls.target).addScaledVector(_v2, idealDist);
+            _idealPos.y += size * 1.5;
+
             // Frame-rate independent lerp
             const alpha = 1 - Math.exp(-rawDelta * 6.0);
             camera.position.lerp(_idealPos, alpha);
-            controls.target.lerp(controls.target, alpha);
-            
+            controls.target.lerp(_v1, alpha);
+
             if (camera.position.distanceTo(_idealPos) < 0.5) {
                 isTransitioning = false;
             }
@@ -1019,8 +1031,9 @@ function animate() {
         const defaultPos = isMobile ? cameraDefaultMobile : cameraDefaultDesktop;
         const alpha = 1 - Math.exp(-rawDelta * 6.0);
         camera.position.lerp(defaultPos, alpha);
-        controls.target.lerp(new THREE.Vector3(0, 0, 0), alpha);
-        
+        _v1.set(0, 0, 0);
+        controls.target.lerp(_v1, alpha);
+
         if (camera.position.distanceTo(defaultPos) < 0.5) {
             isTransitioning = false;
         }

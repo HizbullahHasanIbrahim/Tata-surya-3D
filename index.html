@@ -26,7 +26,7 @@
 <body>
     <div id="app">
         <!-- Loading overlay -->
-        <div id="loading-overlay">
+        <div id="loading-overlay" class="status-overlay">
             <div class="loading-spinner"></div>
             <div class="loading-text">Menyiapkan Tata Surya 3D</div>
         </div>
@@ -46,29 +46,34 @@
         
         <!-- Top HUD -->
         <header class="top-hud">
-            <div class="hud-brand">
-                <h1 class="brand-title">Interactive 3D Solar System</h1>
-                <p class="brand-subtitle">Simulasi astronomi dengan render 3D realistis</p>
-            </div>
-            <div class="hud-controls">
-                <button id="btn-toggle-labels" class="hud-btn" aria-label="Tampilkan/lepas label">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
-                        <line x1="7" y1="7" x2="7.01" y2="7"></line>
-                    </svg>
-                </button>
-                <button id="btn-toggle-orbits" class="hud-btn" aria-label="Tampilkan/lepas orbit">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <line x1="2" y1="12" x2="22" y2="12"></line>
-                    </svg>
-                </button>
-                <button id="btn-reset-view" class="hud-btn" aria-label="Reset tampilan">
-                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
-                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
-                        <path d="M3 3v5h5"></path>
-                    </svg>
-                </button>
+            <div class="top-row">
+                <div class="hud-brand">
+                    <h1 class="brand-title">Interactive 3D Solar System</h1>
+                    <p class="brand-subtitle">Simulasi astronomi dengan render 3D realistis</p>
+                </div>
+                <div class="hud-controls">
+                    <button id="btn-toggle-labels" class="hud-btn is-active" aria-label="Tampilkan/lepas label">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                            <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                        </svg>
+                        <span class="hide-mobile">Label</span>
+                    </button>
+                    <button id="btn-toggle-orbits" class="hud-btn is-active" aria-label="Tampilkan/lepas orbit">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="2" y1="12" x2="22" y2="12"></line>
+                        </svg>
+                        <span class="hide-mobile">Orbit</span>
+                    </button>
+                    <button id="btn-reset-view" class="hud-btn" aria-label="Reset tampilan">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 12l9-9 9 9"></path>
+                            <path d="M3 12v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                        </svg>
+                        <span class="hide-mobile">Reset View</span>
+                    </button>
+                </div>
             </div>
             <nav class="planet-strip-wrap">
                 <div id="planet-strip" class="planet-strip"></div>
@@ -139,9 +144,7 @@
                 <div class="dock-content">
                     <div class="time-controls">
                         <button id="btn-play" class="time-btn" aria-label="Mainkan">
-                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
-                                <polygon points="6 4 20 12 6 20 6 4"/>
-                            </svg>
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><polygon points="6 4 20 12 6 20"></polygon></svg>
                         </button>
                         <button id="btn-pause" class="time-btn" aria-label="Pause">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
