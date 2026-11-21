@@ -1,13 +1,19 @@
 <!DOCTYPE html>
-<html lang="id" data-type="software" data-radius="soft" data-buttons="true" data-motion="true">
+<html lang="id">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tata Surya 3D Interaktif</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Interactive 3D Solar System</title>
     <meta name="description" content="Interaktif 3D Tata Surya dengan 8 planet, cahaya realistis, dan kontrol kamera responsif">
-    <meta name="page-type" content="software">
-    <meta name="site-kind" content="tech">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="style.css">
+    
+    <!-- Importmap Three.js r160 -->
     <script type="importmap">
         {
             "imports": {
@@ -19,56 +25,140 @@
 </head>
 <body>
     <div id="app">
-        <canvas id="solarCanvas"></canvas>
+        <!-- Loading overlay -->
+        <div id="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Menyiapkan Tata Surya 3D</div>
+        </div>
         
-        <div id="hud" class="hidden">
-            <div class="hud-header">
-                <h1>Tata Surya 3D</h1>
-                <div class="hud-controls">
-                    <button id="toggleLabelBtn" aria-label="Tampilkan/lepas label">🔖</button>
-                    <button id="toggleOrbitBtn" aria-label="Tampilkan/lepas orbit">🌍</button>
-                    <button id="resetViewBtn" aria-label="Kembalikan ke tampilan awal">↺</button>
-                </div>
-            </div>
-            
-            <div class="hud-content">
-                <div class="hud-planet-list">
-                    <div class="planet-chip" data-planet="sun">🌞</div>
-                    <div class="planet-chip" data-planet="mercury">☿</div>
-                    <div class="planet-chip" data-planet="venus">♀</div>
-                    <div class="planet-chip" data-planet="earth">🌍</div>
-                    <div class="planet-chip" data-planet="mars">♂</div>
-                    <div class="planet-chip" data-planet="jupiter">♃</div>
-                    <div class="planet-chip" data-planet="saturn">♄</div>
-                    <div class="planet-chip" data-planet="uranus">♅</div>
-                    <div class="planet-chip" data-planet="neptune">♆</div>
-                </div>
+        <!-- WebGL fallback message -->
+        <div id="webgl-fallback" class="status-overlay hidden">
+            <div class="status-content">
+                <h2>Browser Anda tidak mendukung WebGL 2</h2>
+                <p>Silakan gunakan browser modern seperti Chrome, Firefox, Edge, atau Safari terbaru.</p>
             </div>
         </div>
         
-        <div id="infoPanel" class="hidden">
+        <!-- Scene container -->
+        <div id="scene-container">
+            <canvas id="solarCanvas"></canvas>
+        </div>
+        
+        <!-- Top HUD -->
+        <header class="top-hud">
+            <div class="hud-brand">
+                <h1 class="brand-title">Interactive 3D Solar System</h1>
+                <p class="brand-subtitle">Simulasi astronomi dengan render 3D realistis</p>
+            </div>
+            <div class="hud-controls">
+                <button id="btn-toggle-labels" class="hud-btn" aria-label="Tampilkan/lepas label">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"></path>
+                        <line x1="7" y1="7" x2="7.01" y2="7"></line>
+                    </svg>
+                </button>
+                <button id="btn-toggle-orbits" class="hud-btn" aria-label="Tampilkan/lepas orbit">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"></circle>
+                        <line x1="2" y1="12" x2="22" y2="12"></line>
+                    </svg>
+                </button>
+                <button id="btn-reset-view" class="hud-btn" aria-label="Reset tampilan">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+                        <path d="M3 3v5h5"></path>
+                    </svg>
+                </button>
+            </div>
+            <nav class="planet-strip-wrap">
+                <div id="planet-strip" class="planet-strip"></div>
+            </nav>
+        </header>
+        
+        <!-- Interaction hint -->
+        <div id="interaction-hint">
+            <span>Seret untuk memutar, cubit/scroll untuk zoom, ketuk planet untuk info</span>
+        </div>
+        
+        <!-- Info panel -->
+        <aside id="info-panel" class="info-panel hidden">
+            <div class="sheet-grip"></div>
             <div class="info-content">
-                <button id="closeBtn" aria-label="Tutup panel informasi">&times;</button>
-                <h2 id="planetName"></h2>
-                <p class="tagline" id="planetTagline"></p>
-                <p class="desc" id="planetDesc"></p>
-                <div class="data-grid">
-                    <div class="data-item"><strong>Diameter:</strong> <span id="dataDiameter">-</span></div>
-                    <div class="data-item"><strong>Jarak:</strong> <span id="dataDistance">-</span></div>
-                    <div class="data-item"><strong>Orbit:</strong> <span id="dataOrbit">-</span></div>
+                <button id="btn-close-panel" class="btn-close" aria-label="Tutup panel">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                </button>
+                <div class="panel-header">
+                    <div id="panel-swatch" class="swatch"></div>
+                    <div class="panel-meta">
+                        <div id="panel-order" class="order-text"></div>
+                        <h2 id="panel-name" class="planet-name"></h2>
+                    </div>
                 </div>
-                <p class="fact"><strong>Fakta:</strong> <span id="planetFact">-</span></p>
+                <p id="panel-desc" class="description"></p>
+                <div id="panel-features" class="features-section">
+                    <h3>Karakteristik utama</h3>
+                    <ul id="features-list"></ul>
+                </div>
+                <div class="spec-grid">
+                    <div class="spec-item">
+                        <span class="spec-label">Diameter</span>
+                        <span id="spec-diameter" class="spec-value">-</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Jarak rata-rata</span>
+                        <span id="spec-distance" class="spec-value">-</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Periode revolusi</span>
+                        <span id="spec-revolution" class="spec-value">-</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Periode rotasi</span>
+                        <span id="spec-rotation" class="spec-value">-</span>
+                    </div>
+                    <div class="spec-item">
+                        <span class="spec-label">Kemiringan sumbu</span>
+                        <span id="spec-tilt" class="spec-value">-</span>
+                    </div>
+                </div>
             </div>
-        </div>
+        </aside>
         
-        <div id="ui-container">
-            <div id="controls">
-                <button id="playPauseBtn" aria-label="Putar/pause">⏸</button>
-                <input type="range" id="speedSlider" min="0" max="10" step="0.1" value="1">
-                <span id="speedDisplay">1.0x</span>
-                <button id="resetCamBtn" aria-label="Reset Kamera" title="Reset Kamera">↺</button>
+        <!-- Bottom time dock -->
+        <section class="bottom-dock-wrap">
+            <div id="time-dock" class="time-dock">
+                <div class="dock-header">
+                    <div class="dock-status">
+                        <span id="speed-value-mobile" class="speed-value">1.0x</span>
+                        <span id="sim-clock-mobile" class="sim-clock">Hari ke-0 (Tahun ke-0,00)</span>
+                    </div>
+                    <button id="btn-dock-toggle" class="dock-toggle" aria-label="Lipat/kembalikan kontrol">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"></path></svg>
+                    </button>
+                </div>
+                <div class="dock-content">
+                    <div class="time-controls">
+                        <button id="btn-play" class="time-btn" aria-label="Mainkan">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                                <polygon points="6 4 20 12 6 20 6 4"/>
+                            </svg>
+                        </button>
+                        <button id="btn-pause" class="time-btn" aria-label="Pause">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16" rx="1"></rect><rect x="14" y="4" width="4" height="16" rx="1"></rect></svg>
+                        </button>
+                        <button id="btn-reset-time" class="time-btn" aria-label="Reset waktu">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 12a9 9 0 0 1-9 9"></path><path d="M23 12a9 9 0 0 0-9-9"></path><path d="M12 2a9 9 0 0 0 9 9H1"></path></svg>
+                        </button>
+                    </div>
+                    <div class="time-info">
+                        <span id="speed-value" class="speed-value">1.0x</span>
+                        <span id="sim-clock" class="sim-clock">Hari ke-0 (Tahun ke-0,00)</span>
+                    </div>
+                    <input type="range" id="speed-slider" class="speed-slider" min="0" max="10" step="0.1" value="1">
+                </div>
             </div>
-        </div>
+            <div class="scale-note">Skala ukuran dan jarak disederhanakan untuk visualisasi, bukan skala sebenarnya.</div>
+        </section>
     </div>
 
     <script type="module" src="js/main.js"></script>
