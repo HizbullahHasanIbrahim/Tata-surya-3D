@@ -70,15 +70,18 @@ controls.minDistance = minDist;
 controls.maxDistance = 1200;
 
 // Matikan damping otomatis saat pengguna memulai drag
-let isTransitioning = true;
+let cameraAnimMode = null; // 'focus' | 'reset' | null
+const _animToTarget = new THREE.Vector3();
+const _animToCam = new THREE.Vector3();
 let prevTargetPos = new THREE.Vector3();
 controls.addEventListener('start', () => {
-    isTransitioning = false;
+    cameraAnimMode = null;
 });
 
 // ============== CSS2D Renderer untuk Labels ==============
 const labelRenderer = new CSS2DRenderer();
 labelRenderer.setSize(window.innerWidth, window.innerHeight);
+labelRenderer.domElement.className = 'label-renderer';
 labelRenderer.domElement.style.position = 'absolute';
 labelRenderer.domElement.style.top = '0';
 labelRenderer.domElement.style.pointerEvents = 'none';
@@ -227,8 +230,8 @@ const createGlowLayer = (scale, opacity, c0, c1, c2) => {
     return sprite;
 };
 
-sun.add(createGlowLayer(45, 0.8, 'rgba(255, 220, 100, 0.8)', 'rgba(255, 150, 0, 0.4)', 'rgba(255, 50, 0, 0)'));
-sun.add(createGlowLayer(60, 0.4, 'rgba(255, 240, 180, 0.4)', 'rgba(255, 180, 50, 0.2)', 'rgba(130, 0, 0, 0)'));
+sun.add(createGlowLayer(22, 0.8, 'rgba(255, 220, 100, 0.8)', 'rgba(255, 150, 0, 0.4)', 'rgba(255, 50, 0, 0)'));
+sun.add(createGlowLayer(38, 0.34, 'rgba(255, 240, 180, 0.4)', 'rgba(255, 180, 50, 0.2)', 'rgba(130, 0, 0, 0)'));
 
 // ============== Planet & Object Management ==============
 let selectionHighlight = null;
@@ -658,13 +661,14 @@ function handlePlanetClick(event) {
 function focusOnObject(target, data) {
     focusedTarget = target;
     prevTargetPos.setFromMatrixPosition(target.matrixWorld);
-    isTransitioning = true;
+    cameraAnimMode = 'focus';
     minDist = Math.max((data.visualRadius || data.size) * 2.2, 4.5);
     controls.minDistance = minDist;
     
-    // Highlight 3D ring di posisi objek
+    // Extent & Highlight 3D ring di posisi objek
+    const extent = data.id === 'saturn' ? (data.visualRadius * 2.42) : (data.id === 'uranus' ? (data.visualRadius * 1.66) : (data.visualRadius || data.size || 5));
     if (selectionHighlight) {
-        selectionHighlight.scale.setScalar(data.visualRadius || data.size || 5);
+        selectionHighlight.scale.setScalar(extent);
         selectionHighlight.position.copy(prevTargetPos);
         selectionHighlight.visible = true;
     }
@@ -680,6 +684,15 @@ function focusOnObject(target, data) {
         }
     });
 
+    // Hitung arah kamera saat ini
+    _v2.subVectors(camera.position, prevTargetPos).normalize();
+    _v2.y = Math.max(_v2.y, 0.28);
+    _v2.normalize();
+
+    _animToTarget.copy(prevTargetPos);
+    _animToCam.copy(prevTargetPos).addScaledVector(_v2, Math.max(extent * 4.5, 13.5));
+
+    showPlanetChip(data.id);
     updateInfoPanel(data);
 }
 
@@ -724,7 +737,7 @@ function updateInfoPanel(data) {
 function closeInfoPanel() {
     infoPanel.classList.add('hidden');
     focusedTarget = null;
-    isTransitioning = true;
+    cameraAnimMode = null;
     
     // Reset highlight dan orbit colors
     if (selectionHighlight) {
@@ -734,6 +747,10 @@ function closeInfoPanel() {
         line.material.color.setHex(0xffffff);
         line.material.opacity = 0.15;
     });
+
+    // Hapus is-selected dari chip & label
+    document.querySelectorAll('.planet-chip').forEach(c => c.classList.remove('is-selected'));
+    document.querySelectorAll('.planet-label').forEach(l => l.classList.remove('is-selected'));
 }
 
 // ============== Button Handler ==============
@@ -742,11 +759,11 @@ closePanelBtn.addEventListener('click', closeInfoPanel);
 resetViewBtn.addEventListener('click', () => {
     closeInfoPanel();
     focusedTarget = null;
-    isTransitioning = true;
     minDist = isMobile ? 4.5 : 15;
     controls.minDistance = minDist;
-    controls.target.copy(new THREE.Vector3(0, 0, 0));
-    camera.position.copy(isMobile ? cameraDefaultMobile : cameraDefaultDesktop);
+    _animToTarget.set(0, 0, 0);
+    _animToCam.copy(window.innerWidth < window.innerHeight ? cameraDefaultMobile : cameraDefaultDesktop);
+    cameraAnimMode = 'reset';
 });
 
 playPauseBtn.addEventListener('click', () => {
@@ -756,17 +773,14 @@ playPauseBtn.addEventListener('click', () => {
         updateSpeedDisplay(1);
     }
     isPaused = !isPaused;
-    playPauseBtn.style.opacity = isPaused ? 0.5 : 1;
-    pauseBtn.style.opacity = isPaused ? 1 : 0.5;
+    playPauseBtn.classList.toggle('is-active', !isPaused);
+    pauseBtn.classList.toggle('is-active', isPaused);
 });
 
 pauseBtn.addEventListener('click', () => {
     isPaused = true;
-    timeScale = 0;
-    speedSlider.value = 0;
-    updateSpeedDisplay(0);
-    playPauseBtn.style.opacity = 0.5;
-    pauseBtn.style.opacity = 1;
+    playPauseBtn.classList.remove('is-active');
+    pauseBtn.classList.add('is-active');
 });
 
 speedSlider.addEventListener('input', e => {
@@ -852,67 +866,58 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// ============== UI Initialization ==============
-document.addEventListener('DOMContentLoaded', () => {
-    // Hide loading overlay
-    const loading = document.getElementById('loading-overlay');
-    if (loading) {
-        setTimeout(() => {
-            loading.classList.add('hidden');
-        }, 800);
-    }
+// ============== UI Initialization (Tanpa DOMContentLoaded) ==============
+toggleLabelBtn.style.opacity = '1';
+toggleOrbitBtn.style.opacity = '1';
+pauseBtn.style.opacity = '0.5';
+updateSpeedDisplay(1);
+
+// Build planet strip
+const planetStrip = document.getElementById('planet-strip');
+const colors = {
+    sun: '#ffaa00', mercury: '#a8a29e', venus: '#fbbf24', earth: '#38bdf8',
+    mars: '#f87171', jupiter: '#fb923c', saturn: '#fde047',
+    uranus: '#67e8f9', neptune: '#60a5fa'
+};
+const names = {
+    sun: 'Matahari', mercury: 'Merkurius', venus: 'Venus', earth: 'Bumi',
+    mars: 'Mars', jupiter: 'Jupiter', saturn: 'Saturnus',
+    uranus: 'Uranus', neptune: 'Neptunus'
+};
+
+['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'].forEach(id => {
+    const chip = document.createElement('div');
+    chip.className = 'planet-chip';
+    chip.setAttribute('data-planet', id);
     
-    // Initialize button states
-    toggleLabelBtn.style.opacity = '1';
-    toggleOrbitBtn.style.opacity = '1';
-    pauseBtn.style.opacity = '0.5';
+    const dot = document.createElement('div');
+    dot.className = 'chip-dot';
+    dot.style.background = colors[id];
     
-    // Build planet strip
-    const planetStrip = document.getElementById('planet-strip');
-    const colors = {
-        sun: '#ffaa00', mercury: '#a8a29e', venus: '#fbbf24', earth: '#38bdf8',
-        mars: '#f87171', jupiter: '#fb923c', saturn: '#fde047',
-        uranus: '#67e8f9', neptune: '#60a5fa'
-    };
-    const names = {
-        sun: 'Matahari', mercury: 'Merkurius', venus: 'Venus', earth: 'Bumi',
-        mars: 'Mars', jupiter: 'Jupiter', saturn: 'Saturnus',
-        uranus: 'Uranus', neptune: 'Neptunus'
-    };
+    const span = document.createElement('span');
+    span.textContent = names[id];
     
-    ['sun', 'mercury', 'venus', 'earth', 'mars', 'jupiter', 'saturn', 'uranus', 'neptune'].forEach(id => {
-        const chip = document.createElement('div');
-        chip.className = 'planet-chip';
-        chip.setAttribute('data-planet', id);
-        
-        const dot = document.createElement('div');
-        dot.className = 'chip-dot';
-        dot.style.background = colors[id];
-        
-        const span = document.createElement('span');
-        span.textContent = names[id];
-        
-        chip.appendChild(dot);
-        chip.appendChild(span);
-        planetStrip.appendChild(chip);
-        
-        chip.addEventListener('click', () => {
-            if (id === 'sun') {
-                focusOnObject(sun, sun.userData);
-            } else {
-                const planet = planets.find(p => p.config.id === id);
-                if (planet) focusOnObject(planet.mesh, planet.config);
-            }
-            showPlanetChip(id);
-        });
+    chip.appendChild(dot);
+    chip.appendChild(span);
+    planetStrip.appendChild(chip);
+    
+    chip.addEventListener('click', () => {
+        if (id === 'sun') {
+            focusOnObject(sun, sun.userData);
+        } else {
+            const planet = planets.find(p => p.config.id === id);
+            if (planet) focusOnObject(planet.mesh, planet.config);
+        }
     });
-    
-    
 });
 
 function showPlanetChip(id) {
     document.querySelectorAll('.planet-chip').forEach(c => {
         c.classList.toggle('is-selected', c.getAttribute('data-planet') === id);
+    });
+    document.querySelectorAll('.planet-label').forEach(l => {
+        const isMatch = l.textContent.toLowerCase() === (id === 'sun' ? 'matahari' : id.toLowerCase());
+        l.classList.toggle('is-selected', isMatch);
     });
 }
 
@@ -931,8 +936,11 @@ function updateSimClock(day, year) {
 }
 
 // ============== Animation Loop ==============
+let animFrameId = null;
+let firstFrameRendered = false;
+
 function animate() {
-    requestAnimationFrame(animate);
+    animFrameId = requestAnimationFrame(animate);
     
     // rawDelta untuk kamera & twinkle bintang (frame-rate independen)
     const rawDelta = Math.min(clock.getDelta(), 0.1);
@@ -1001,6 +1009,10 @@ function animate() {
         _delta.subVectors(_v1, prevTargetPos);
         camera.position.add(_delta);
         controls.target.add(_delta);
+        if (cameraAnimMode === 'focus') {
+            _animToTarget.add(_delta);
+            _animToCam.add(_delta);
+        }
         prevTargetPos.copy(_v1);
 
         // Update highlight mengikuti objek
@@ -1009,44 +1021,37 @@ function animate() {
             selectionHighlight.quaternion.copy(camera.quaternion);
         }
 
-        if (isTransitioning) {
-            const size = focusedTarget.userData?.visualRadius || focusedTarget.userData?.size || 5;
-            const idealDist = Math.max(size * 5, 20);
-
-            // Posisi ideal dari arah kamera saat ini (bukan selalu +Z)
-            _v2.subVectors(camera.position, controls.target).normalize();
-            _idealPos.copy(controls.target).addScaledVector(_v2, idealDist);
-            _idealPos.y += size * 1.5;
-
-            // Frame-rate independent lerp
+        if (cameraAnimMode !== null) {
             const alpha = 1 - Math.exp(-rawDelta * 6.0);
-            camera.position.lerp(_idealPos, alpha);
-            controls.target.lerp(_v1, alpha);
+            camera.position.lerp(_animToCam, alpha);
+            controls.target.lerp(_animToTarget, alpha);
 
-            if (camera.position.distanceTo(_idealPos) < 0.5) {
-                isTransitioning = false;
+            if (camera.position.distanceTo(_animToCam) < 0.15 && controls.target.distanceTo(_animToTarget) < 0.15) {
+                cameraAnimMode = null;
             }
         }
-    } else if (isTransitioning) {
-        const defaultPos = isMobile ? cameraDefaultMobile : cameraDefaultDesktop;
+    } else if (cameraAnimMode === 'reset') {
         const alpha = 1 - Math.exp(-rawDelta * 6.0);
-        camera.position.lerp(defaultPos, alpha);
-        _v1.set(0, 0, 0);
-        controls.target.lerp(_v1, alpha);
+        camera.position.lerp(_animToCam, alpha);
+        controls.target.lerp(_animToTarget, alpha);
 
-        if (camera.position.distanceTo(defaultPos) < 0.5) {
-            isTransitioning = false;
+        if (camera.position.distanceTo(_animToCam) < 0.15 && controls.target.distanceTo(_animToTarget) < 0.15) {
+            cameraAnimMode = null;
         }
-    }
-    
-    // Hentikan transisi otomatis saat user drag
-    if (controls.enabled && controls.mouseButtons.LEFT === THREE.MOUSE.LEFT) {
-        // controls.start event sudah handle ini
     }
     
     controls.update();
     renderer.render(scene, camera);
     labelRenderer.render(scene, camera);
+
+    // Hide loading overlay after first frame
+    if (!firstFrameRendered) {
+        firstFrameRendered = true;
+        const loading = document.getElementById('loading-overlay');
+        if (loading) {
+            loading.classList.add('hidden');
+        }
+    }
 }
 
 // ============== Window Handlers ==============
@@ -1070,8 +1075,15 @@ window.addEventListener('resize', () => {
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         clock.stop();
+        if (animFrameId) {
+            cancelAnimationFrame(animFrameId);
+            animFrameId = null;
+        }
     } else {
         clock.start();
+        if (!animFrameId) {
+            animate();
+        }
     }
 });
 
