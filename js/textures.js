@@ -410,6 +410,89 @@ export function buildRingStripTexture(stops, noiseSeed, isMobile) {
     return tex;
 }
 
+// 6. Tekstur Latar Galaksi Bima Sakti 360° Prosedural (Equirectangular)
+export function buildGalaxyBackdropTexture(isMobile) {
+    const width = isMobile ? 512 : 1024;
+    const height = isMobile ? 256 : 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    const rng = createRng(9911);
+
+    // Dasar ruang angkasa gelap dengan gradasi lembut di ekuator
+    const baseGrad = ctx.createLinearGradient(0, 0, 0, height);
+    baseGrad.addColorStop(0, '#02040b');
+    baseGrad.addColorStop(0.35, '#060d1f');
+    baseGrad.addColorStop(0.65, '#060d1f');
+    baseGrad.addColorStop(1, '#02040b');
+    ctx.fillStyle = baseGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Pita galaksi Bima Sakti (Milky Way) bergelombang di tengah
+    const bandY = (x) => height * 0.5 + Math.sin((x / width) * Math.PI * 2) * height * 0.06 + Math.cos((x / width) * Math.PI * 4) * height * 0.03;
+
+    // Awan nebula radial beropasitas rendah
+    const nebulaColors = ['#1d4ed8', '#312e81', '#581c87', '#0ea5e9'];
+    const cloudCount = isMobile ? 120 : 240;
+    for (let i = 0; i < cloudCount; i++) {
+        const x = rng() * width;
+        const y = bandY(x) + (rng() - 0.5) * height * 0.22;
+        const rx = rng() * (isMobile ? 60 : 120) + 30;
+        const ry = rng() * (isMobile ? 18 : 36) + 10;
+        const color = nebulaColors[Math.floor(rng() * nebulaColors.length)];
+        const opacity = (rng() * 0.06 + 0.03).toFixed(3);
+        ctx.fillStyle = color;
+        ctx.globalAlpha = parseFloat(opacity);
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, (rng() - 0.5) * 0.6, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Guratan debu gelap tipis di inti pita
+    ctx.globalAlpha = 1;
+    const dustCount = isMobile ? 30 : 60;
+    for (let i = 0; i < dustCount; i++) {
+        const x = rng() * width;
+        const y = bandY(x) + (rng() - 0.5) * height * 0.08;
+        const rx = rng() * (isMobile ? 30 : 60) + 15;
+        const ry = rng() * (isMobile ? 4 : 8) + 2;
+        ctx.fillStyle = 'rgba(2, 4, 11, 0.35)';
+        ctx.beginPath();
+        ctx.ellipse(x, y, rx, ry, (rng() - 0.5) * 0.4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Taburkan ~900 titik micro-stars latar belakang tipis
+    const starCount = isMobile ? 450 : 900;
+    for (let i = 0; i < starCount; i++) {
+        const x = rng() * width;
+        const y = rng() * height;
+        // Lebih padat di sekitar pita galaksi
+        const distToBand = Math.abs(y - bandY(x));
+        const inBand = distToBand < height * 0.18;
+        if (!inBand && rng() > 0.35) continue;
+
+        const size = rng() > 0.9 ? 1.5 : 0.8;
+        const opacity = (rng() * 0.5 + 0.2).toFixed(3);
+        ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    ctx.globalAlpha = 1;
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.ClampToEdgeWrapping;
+    tex.anisotropy = isMobile ? 2 : 4;
+    tex.needsUpdate = true;
+    textureRegistry.push(tex);
+    return tex;
+}
+
 // Lepas semua tekstur WebGL saat unload untuk mencegah kebocoran memori
 export function disposeAllTextures() {
     while (textureRegistry.length > 0) {

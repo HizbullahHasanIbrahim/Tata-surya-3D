@@ -18,6 +18,7 @@ import {
     buildPlanetTexture,
     buildEarthCloudsTexture,
     buildRingStripTexture,
+    buildGalaxyBackdropTexture,
     disposeAllTextures
 } from './textures.js';
 
@@ -49,6 +50,18 @@ if (!renderer.capabilities.isWebGL2) {
 
 // ============== Scene Setup ==============
 const scene = new THREE.Scene();
+
+// ============== SkyDome Galaksi Bima Sakti 360° ==============
+const galaxySkyDome = new THREE.Mesh(
+    new THREE.SphereGeometry(1600, 32, 20),
+    new THREE.MeshBasicMaterial({
+        map: buildGalaxyBackdropTexture(isMobile),
+        side: THREE.BackSide,
+        depthWrite: false
+    })
+);
+galaxySkyDome.rotation.z = THREE.MathUtils.degToRad(28);
+scene.add(galaxySkyDome);
 
 // ============== Camera Setup ==============
 const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 4000);
@@ -107,49 +120,80 @@ const starColors = new Float32Array(starsCount * 3);
 const starSizes = new Float32Array(starsCount);
 const starPhases = new Float32Array(starsCount);
 
+const tiltRad = THREE.MathUtils.degToRad(28);
+const cosTilt = Math.cos(tiltRad);
+const sinTilt = Math.sin(tiltRad);
+
 for (let i = 0; i < starsCount; i++) {
-    const r = 380 + Math.random() * 540; // Radius 380-920
-    const theta = Math.random() * Math.PI * 2;
-    const phi = Math.acos(2 * Math.random() - 1);
-    
-    starPositions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-    starPositions[i * 3 + 1] = r * Math.cos(phi); // PERBAIKAN: gunakan Math.cos(phi) untuk Y
-    starPositions[i * 3 + 2] = r * Math.sin(phi) * Math.sin(theta);
-    
+    const isBand = i >= Math.floor(starsCount * 0.65);
+    let x, y, z;
+
+    if (!isBand) {
+        // 65% tersebar acak di bola radius 420-1050
+        const r = 420 + Math.random() * 630;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        x = r * Math.sin(phi) * Math.cos(theta);
+        y = r * Math.cos(phi);
+        z = r * Math.sin(phi) * Math.sin(theta);
+    } else {
+        // 35% terkonsentrasi di sepanjang pita galaksi yang sama (dimiringkan 28°)
+        const r = 420 + Math.random() * 630;
+        const theta = Math.random() * Math.PI * 2;
+        const thickness = (Math.random() - 0.5) * (isMobile ? 80 : 140);
+        const lx = r * Math.cos(theta);
+        const ly = thickness;
+        const lz = r * Math.sin(theta);
+        // Rotasi 28° terhadap sumbu Z
+        x = lx * cosTilt - ly * sinTilt;
+        y = lx * sinTilt + ly * cosTilt;
+        z = lz;
+    }
+
+    starPositions[i * 3] = x;
+    starPositions[i * 3 + 1] = y;
+    starPositions[i * 3 + 2] = z;
+
     // Variasi warna bintang
     const colorChoice = Math.random();
     if (colorChoice < 0.4) starColors.set([0.8, 0.85, 1.0], i * 3);      // Biru muda
     else if (colorChoice < 0.75) starColors.set([1.0, 0.95, 0.8], i * 3); // Krem hangat
     else starColors.set([0.9, 0.9, 0.95], i * 3);                       // Putih
-    
-    starSizes[i] = Math.random() * 1.2 + 0.5;
+
+    // Variasi ukuran: 3% bintang terang, sisanya tajam
+    if (Math.random() < 0.03) {
+        starSizes[i] = 4.5 + Math.random() * 3.5;
+    } else {
+        starSizes[i] = 1.4 + Math.random() * 1.8;
+    }
     starPhases[i] = Math.random() * Math.PI * 2;
 }
 
 starGeometry.setAttribute('position', new THREE.BufferAttribute(starPositions, 3));
-starGeometry.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
-starGeometry.setAttribute('size', new THREE.BufferAttribute(starSizes, 1));
-starGeometry.setAttribute('phase', new THREE.BufferAttribute(starPhases, 1));
+starGeometry.setAttribute('aColor', new THREE.BufferAttribute(starColors, 3));
+starGeometry.setAttribute('aSize', new THREE.BufferAttribute(starSizes, 1));
+starGeometry.setAttribute('aPhase', new THREE.BufferAttribute(starPhases, 1));
 
 const starMaterial = new THREE.ShaderMaterial({
     uniforms: {
         uTime: { value: 0 },
-        uColor: { value: new THREE.Color(0xffffff) }
+        uPixelRatio: { value: renderer.getPixelRatio() }
     },
     vertexShader: `
-        attribute float size;
-        attribute float phase;
-        attribute vec3 color;
+        attribute vec3 aColor;
+        attribute float aSize;
+        attribute float aPhase;
         uniform float uTime;
+        uniform float uPixelRatio;
         varying float vTwinkle;
         varying vec3 vColor;
         
         void main() {
-            vColor = color;
-            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_PointSize = size * (300.0 / -mvPosition.z);
-            gl_Position = projectionMatrix * mvPosition;
-            vTwinkle = 0.7 + 0.3 * sin(uTime * 2.0 + phase * 10.0);
+            vColor = aColor;
+            vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = clamp(aSize * uPixelRatio * (420.0 / -mvPos.z), 1.4, 12.0);
+            gl_Position = projectionMatrix * mvPos;
+            vTwinkle = 0.7 + 0.3 * sin(uTime * 2.0 + aPhase * 10.0);
         }
     `,
     fragmentShader: `
@@ -167,8 +211,7 @@ const starMaterial = new THREE.ShaderMaterial({
     `,
     transparent: true,
     depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    vertexColors: true
+    blending: THREE.AdditiveBlending
 });
 
 const starField = new THREE.Points(starGeometry, starMaterial);
@@ -831,10 +874,7 @@ resetTimeBtn.addEventListener('click', () => {
 
 toggleLabelBtn.addEventListener('click', () => {
     showLabels = !showLabels;
-    const labels = document.querySelectorAll('.planet-label');
-    labels.forEach(label => {
-        label.style.display = showLabels ? 'block' : 'none';
-    });
+    labelObjects.forEach(obj => { obj.visible = showLabels; });
     toggleLabelBtn.style.opacity = showLabels ? 1 : 0.5;
     toggleLabelBtn.classList.toggle('is-active', showLabels);
 });
@@ -1069,6 +1109,11 @@ window.addEventListener('resize', () => {
     const newMobile = width < 768;
     const newRatio = Math.min(window.devicePixelRatio, newMobile ? 1.5 : 2);
     renderer.setPixelRatio(newRatio);
+
+    // Perbarui uPixelRatio shader bintang
+    if (starMaterial && starMaterial.uniforms && starMaterial.uniforms.uPixelRatio) {
+        starMaterial.uniforms.uPixelRatio.value = newRatio;
+    }
 });
 
 // Visibility change untuk hemat baterai
